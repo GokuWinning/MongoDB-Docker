@@ -48,6 +48,7 @@ replica.key: A key file shared across the MongoDB containers for secure replica 
 	openssl rand -base64 756 > replica.key
 	chmod 400 replica.key
 
+.env: File used to define the MongoDB root username and password, which are referenced by the MongoDB containers for initialization.
 mongo-init.js: A JavaScript file that creates an admin user with read/write permissions for initializing the replica set.
 
 

@@ -8,8 +8,8 @@ services:
     ports:
       - "27018:27017"
     environment: 
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     entrypoint:
       - bash
       - -c
@@ -25,7 +25,7 @@ services:
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro # Script to execute during mongodb Initialization. Create admin role
     restart: always
     healthcheck:
-      test: ["CMD", "mongosh", "-u", "$MONGO_INITDB_ROOT_USERNAME", "-p", "$MONGO_INITDB_ROOT_PASSWORD", "--eval", "db.runCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "${MONGO_INITDB_ROOT_USERNAME}", "-p", "${MONGO_INITDB_ROOT_PASSWORD}", "--eval", "db.runCommand('ping')"]
       interval: 30s
       retries: 5
       start_period: 10s
@@ -38,8 +38,8 @@ services:
     ports:
       - "27019:27017"
     environment: 
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     entrypoint:
       - bash
       - -c
@@ -54,11 +54,11 @@ services:
       - ./replica.key:/etc/replica.key # Sets replica set key to be shared across cluster
     restart: always
     healthcheck:
-      test: ["CMD", "mongosh", "-u", "$MONGO_INITDB_ROOT_USERNAME", "-p", "$MONGO_INITDB_ROOT_PASSWORD", "--eval", "db.runCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "${MONGO_INITDB_ROOT_USERNAME}", "-p", "${MONGO_INITDB_ROOT_PASSWORD}", "--eval", "db.runCommand('ping')"]
       interval: 30s
       retries: 5
       start_period: 10s
-    init: true
+    init: true  # This will be used to mark if this container should run init scripts
 
   mongo3: #Creates a secondary node for replica set
     image: mongo
@@ -67,8 +67,8 @@ services:
     ports:
       - "27020:27017"
     environment: 
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     entrypoint:
       - bash
       - -c
@@ -83,11 +83,11 @@ services:
       - ./replica.key:/etc/replica.key # Sets replica set key to be shared across cluster
     restart: always
     healthcheck:
-      test: ["CMD", "mongosh", "-u", "$MONGO_INITDB_ROOT_USERNAME", "-p", "$MONGO_INITDB_ROOT_PASSWORD", "--eval", "db.runCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "${MONGO_INITDB_ROOT_USERNAME}", "-p", "${MONGO_INITDB_ROOT_PASSWORD}", "--eval", "db.runCommand('ping')"]
       interval: 30s
       retries: 5
       start_period: 10s
-    init: true
+    init: true  # This will be used to mark if this container should run init scripts
 
   # Replica Set Initialization Service
   mongo-init:
@@ -98,16 +98,20 @@ services:
       - bash
       - -c
       - |
+          export MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+          export MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+          echo $MONGO_INITDB_ROOT_USERNAME
+          echo $MONGO_INITDB_ROOT_PASSWORD
           # Wait for all MongoDB nodes to be up
-          while ! mongosh --host mongo1 -u admin -p password --eval "print('waiting for mongo1')" &>/dev/null || \
-                ! mongosh --host mongo2 -u admin -p password --eval "print('waiting for mongo2')" &>/dev/null || \
-                ! mongosh --host mongo3 -u admin -p password --eval "print('waiting for mongo3')" &>/dev/null; do
+          while ! mongosh --host mongo1 -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --eval "print('waiting for mongo1')" &>/dev/null || \
+                ! mongosh --host mongo2 -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --eval "print('waiting for mongo2')" &>/dev/null || \
+                ! mongosh --host mongo3 -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --eval "print('waiting for mongo3')" &>/dev/null; do
             echo "Waiting for MongoDB nodes to be up..."
             sleep 2
           done
 
           # Initialize replica set on mongo1
-          mongosh --host mongo1 -u admin -p password <<EOF
+          mongosh --host mongo1 -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} <<EOF
           rs.initiate({
             _id: 'myReplicaSet',
             members: [
