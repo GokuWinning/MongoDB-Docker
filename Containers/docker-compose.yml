@@ -4,45 +4,120 @@ services:
   mongo1: #Creates the primary node for replica set
     image: mongo
     container_name: mongo1
-    command: ["mongod", "--replSet", "myReplicaSet", "--bind_ip", "0.0.0.0"]
+    command: ["mongod", "--replSet", "myReplicaSet", "--bind_ip", "0.0.0.0", "--keyFile", "/etc/replica.key"]
     ports:
       - "27018:27017"
+    environment: 
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    entrypoint:
+      - bash
+      - -c
+      - |
+          chmod 400 /etc/replica.key
+          chown 999:999 /etc/replica.key
+          exec docker-entrypoint.sh $$@
     networks:
       - mongoCluster
     volumes:
       - ./data/mongo1:/data/db  # Persist MongoDB data for mongo1
+      - ./replica.key:/etc/replica.key # Sets replica set key to be shared across cluster
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro # Script to execute during mongodb Initialization. Create admin role
     restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "-u", "$MONGO_INITDB_ROOT_USERNAME", "-p", "$MONGO_INITDB_ROOT_PASSWORD", "--eval", "db.runCommand('ping')"]
+      interval: 30s
+      retries: 5
+      start_period: 10s
     init: true  # This will be used to mark if this container should run init scripts
 
   mongo2: #Creates a secondary node for replica set
     image: mongo
     container_name: mongo2
-    command: ["mongod", "--replSet", "myReplicaSet", "--bind_ip", "0.0.0.0"]
+    command: ["mongod", "--replSet", "myReplicaSet", "--bind_ip", "0.0.0.0", "--keyFile", "/etc/replica.key"]
     ports:
       - "27019:27017"
+    environment: 
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    entrypoint:
+      - bash
+      - -c
+      - |
+          chmod 400 /etc/replica.key
+          chown 999:999 /etc/replica.key
+          exec docker-entrypoint.sh $$@
     networks:
       - mongoCluster
     volumes:
       - ./data/mongo2:/data/db  # Persist MongoDB data for mongo2
+      - ./replica.key:/etc/replica.key # Sets replica set key to be shared across cluster
     restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "-u", "$MONGO_INITDB_ROOT_USERNAME", "-p", "$MONGO_INITDB_ROOT_PASSWORD", "--eval", "db.runCommand('ping')"]
+      interval: 30s
+      retries: 5
+      start_period: 10s
+    init: true
 
   mongo3: #Creates a secondary node for replica set
     image: mongo
     container_name: mongo3
-    command: ["mongod", "--replSet", "myReplicaSet", "--bind_ip", "0.0.0.0"]
+    command: ["mongod", "--replSet", "myReplicaSet", "--bind_ip", "0.0.0.0", "--keyFile", "/etc/replica.key"]
     ports:
       - "27020:27017"
+    environment: 
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    entrypoint:
+      - bash
+      - -c
+      - |
+          chmod 400 /etc/replica.key
+          chown 999:999 /etc/replica.key
+          exec docker-entrypoint.sh $$@
     networks:
       - mongoCluster
     volumes:
-      - ./data/mongo3:/data/db  # Persist MongoDB data for mongo3
+      - ./data/mongo3:/data/db  # Persist MongoDB data for mongo2
+      - ./replica.key:/etc/replica.key # Sets replica set key to be shared across cluster
     restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "-u", "$MONGO_INITDB_ROOT_USERNAME", "-p", "$MONGO_INITDB_ROOT_PASSWORD", "--eval", "db.runCommand('ping')"]
+      interval: 30s
+      retries: 5
+      start_period: 10s
+    init: true
 
-
-  mongo-init: # Replica Set Initialization Service
+  # Replica Set Initialization Service
+  mongo-init:
     image: mongo
     container_name: mongo-init
-    command: ["sh", "-c", "sleep 10 && mongosh --host mongo1 --eval 'rs.initiate({ _id: \"myReplicaSet\", members: [ { _id: 0, host: \"mongo1\" }, { _id: 1, host: \"mongo2\" }, { _id: 2, host: \"mongo3\" } ] })'"]
+    command: ["sh", "-c", "sleep 1"]
+    entrypoint:
+      - bash
+      - -c
+      - |
+          # Wait for all MongoDB nodes to be up
+          while ! mongosh --host mongo1 -u admin -p password --eval "print('waiting for mongo1')" &>/dev/null || \
+                ! mongosh --host mongo2 -u admin -p password --eval "print('waiting for mongo2')" &>/dev/null || \
+                ! mongosh --host mongo3 -u admin -p password --eval "print('waiting for mongo3')" &>/dev/null; do
+            echo "Waiting for MongoDB nodes to be up..."
+            sleep 2
+          done
+
+          # Initialize replica set on mongo1
+          mongosh --host mongo1 -u admin -p password <<EOF
+          rs.initiate({
+            _id: 'myReplicaSet',
+            members: [
+              { _id: 0, host: 'mongo1:27017' },
+              { _id: 1, host: 'mongo2:27017' },
+              { _id: 2, host: 'mongo3:27017' }
+            ]
+          })
+          EOF
+          exec docker-entrypoint.sh $$@
     networks:
       - mongoCluster
     restart: "no"
